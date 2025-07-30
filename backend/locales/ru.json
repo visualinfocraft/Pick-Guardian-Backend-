@@ -1,0 +1,28 @@
+{
+  "language_heading": "Добро пожаловать!",
+  "language_subtext": "Это русская версия приложения.",
+  "login_title": "Войти в свой аккаунт",
+  "register_title": "Создать новый аккаунт",
+  "email_label": "Адрес электронной почты",
+  "password_label": "Пароль",
+  "confirm_password_label": "Подтвердите пароль",
+  "login_button": "Войти",
+  "register_button": "Зарегистрироваться",
+  "forgot_password": "Забыли пароль?",
+  "reset_password": "Сбросить пароль",
+  "otp_sent_message": "OTP отправлен на вашу почту.",
+  "otp_verified": "OTP успешно подтвержден.",
+  "otp_invalid": "Неверный или просроченный OTP.",
+  "password_mismatch": "Пароли не совпадают.",
+  "user_not_found": "Пользователь не найден.",
+  "registration_success": "Пользователь успешно зарегистрирован!",
+  "password_reset_success": "Пароль успешно сброшен.",
+  "google_login": "Продолжить с Google",
+  "facebook_login": "Продолжить с Facebook",
+  "logout_button": "Выйти",
+  "language_selector_label": "Выберите язык",
+  "invalid_credentials": "Неверные учетные данные",
+  "login_success": "Успешный вход",
+  "server_error": "Ошибка сервера"
+
+}

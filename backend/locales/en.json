@@ -1,0 +1,29 @@
+{
+  "language_heading": "Welcome!",
+  "language_subtext": "This is the English version of the app.",
+  "login_title": "Login to Your Account",
+  "register_title": "Create a New Account",
+  "email_label": "Email Address",
+  "password_label": "Password",
+  "confirm_password_label": "Confirm Password",
+  "login_button": "Login",
+  "register_button": "Register",
+  "forgot_password": "Forgot your password?",
+  "reset_password": "Reset Password",
+  "otp_sent_message": "OTP has been sent to your email.",
+  "otp_verified": "OTP verified successfully.",
+  "otp_invalid": "Invalid or expired OTP.",
+  "password_mismatch": "Passwords do not match.",
+  "user_not_found": "User not found.",
+  "registration_success": "User registered successfully!",
+  "password_reset_success": "Password has been reset successfully.",
+  "google_login": "Continue with Google",
+  "facebook_login": "Continue with Facebook",
+  "logout_button": "Logout",
+  "language_selector_label": "Select Language",
+  "invalid_credentials": "Invalid credentials",
+  "login_success": "Login successful",
+  "server_error": "Server error"
+
+
+}

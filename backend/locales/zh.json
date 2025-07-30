@@ -1,0 +1,29 @@
+{
+  "language_heading": "欢迎！",
+  "language_subtext": "这是该应用程序的中文版本。",
+  "login_title": "登录您的账户",
+  "register_title": "创建新账户",
+  "email_label": "电子邮件地址",
+  "password_label": "密码",
+  "confirm_password_label": "确认密码",
+  "login_button": "登录",
+  "register_button": "注册",
+  "forgot_password": "忘记密码？",
+  "reset_password": "重置密码",
+  "otp_sent_message": "OTP已发送至您的邮箱。",
+  "otp_verified": "OTP验证成功。",
+  "otp_invalid": "无效或已过期的OTP。",
+  "password_mismatch": "密码不匹配。",
+  "user_not_found": "未找到用户。",
+  "registration_success": "用户注册成功！",
+  "password_reset_success": "密码已成功重置。",
+  "google_login": "使用Google继续",
+  "facebook_login": "使用Facebook继续",
+  "logout_button": "退出登录",
+  "language_selector_label": "选择语言",
+  "invalid_credentials": "无效的凭据",
+  "login_success": "登录成功",
+  "server_error": "服务器错误"
+
+
+}
