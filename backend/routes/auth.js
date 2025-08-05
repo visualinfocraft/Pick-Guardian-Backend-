@@ -2,84 +2,117 @@ const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
 const sgMail = require("@sendgrid/mail");
 const passport = require("passport");
-const session = require('express-session');
+const session = require("express-session");
 const authenticateToken = require("../middleware/authMiddleware");
-const Note = require("../models/Note");
-
+const knex = require("../config/Knex");
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const otpStore = new Map(); // In-memory OTP store
-const app = express();
-
 
 // ------------------ Google Authentication Middleware ------------------
-
-app.use(session({
+router.use(session({
   secret: 'your_secret',
   resave: false,
   saveUninitialized: true,
 }));
 
-app.use(passport.initialize());
-app.use(passport.session());
+router.use(passport.initialize());
+router.use(passport.session());
 
 // ------------------ Register ------------------
-router.post("/register", async (req, res) => {
+
+
+ router.post("/register", async (req, res) => {
   try {
     const { email, password, confirmPassword } = req.body;
 
     if (password !== confirmPassword)
       return res.status(400).json({ error: "Passwords do not match" });
 
+    const existingUser = await knex("users").where({ email }).first();
+    if (existingUser) {
+      return res.status(400).json({ error: "Email already exists" });
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await User.create({ email, passwordHash });
+    const [user] = await knex("users").insert({ email, passwordHash }).returning("*");
 
     res.status(201).json({ message: "User registered", userId: user.id });
   } catch (err) {
-    res.status(400).json({ error: "Email already exists or invalid input" });
+    console.error(err);
+    res.status(400).json({ error: "Registration failed" });
   }
 });
 
 // ------------------ Login ------------------
+
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ where: { email } });
-    if (!user) return res.status(401).json({ error: req.t("invalid_credentials") });
+ if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    const user = await knex("users").where({ email }).first();
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
     const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) return res.status(401).json({ error: req.t("invalid_credentials") });
+    if (!valid) return res.status(401).json({ error: "Invalid credentials" });
 
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-    res.json({ message: req.t("login_success"), token });
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "2h" });
+    res.json({ message: "Login success", token });
   } catch (err) {
-    res.status(500).json({ error: req.t("server_error") });
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
-
-
+ 
 // ------------------ Forgot Password (Send OTP via Email) ------------------
 router.post("/forgot-password", async (req, res) => {
   const { email } = req.body;
 
-  const user = await User.findOne({ where: { email } });
+  const user = await knex("users").where({ email }).first();
   if (!user) return res.status(404).json({ error: "Email not found" });
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otp = Math.floor(10000 + Math.random() * 90000).toString();
   otpStore.set(email, { otp, createdAt: Date.now() });
 
-  const msg = {
-    to: email,
-    from: process.env.SENDGRID_SENDER_EMAIL,
-    subject: "Your OTP for Password Reset",
-    text: `Your OTP is: ${otp}. It will expire in 10 minutes.`,
-    html: `<strong>Your OTP is: ${otp}</strong><br>It will expire in 10 minutes.`,
-  };
+ const msg = {
+  to: email,
+  from: `Pick Guardian <${process.env.SENDGRID_SENDER_EMAIL}>`,
+  subject: "Your OTP Code - Pick Guardian",
+  html: `
+    <div style="font-family: 'Segoe UI', sans-serif; max-width: 480px; margin: 30px auto; background-color: #ffffff; border-radius: 10px; padding: 30px 20px; border: 1px solid #e5e7eb; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+
+      <!-- Logo -->
+     <div style="text-align: center;">
+  <img src="https://i.postimg.cc/02SK1WN3/logo.png" alt="Pick Guardian Logo" style="display: inline-block; max-width: 100px; margin-bottom: 16px;" />
+</div>
+      <!-- Message -->
+      <p style="text-align: center; font-size: 14px; color: #4a5568; margin: 0 0 24px;">
+        Use the following One Time Password (OTP) to reset your password. This OTP is valid for the next <strong>10 minutes</strong>.
+      </p>
+
+      <!-- OTP Box -->
+      <div style="text-align: center; margin: 24px 0;">
+        <span style="display: inline-block; background: #e9f1ff; padding: 14px 32px; font-size: 28px; font-weight: bold; color: #1a73e8; border-radius: 10px; letter-spacing: 4px;">
+          ${otp}
+        </span>
+      </div>
+
+      <!-- Footer -->
+      <p style="text-align: center; font-size: 12px; color: #a0aec0; margin-top: 30px;">
+        If you didn’t request this, you can ignore this email.
+      </p>
+
+    </div>
+  `,
+};
+
 
   try {
     await sgMail.send(msg);
@@ -115,56 +148,63 @@ router.post("/reset-password", async (req, res) => {
   if (newPassword !== confirmPassword)
     return res.status(400).json({ error: "Passwords do not match" });
 
-  const user = await User.findOne({ where: { email } });
+  const user = await knex("users").where({ email }).first();
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  user.passwordHash = await bcrypt.hash(newPassword, 10);
-  await user.save();
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await knex("users").where({ email }).update({ passwordHash });
 
   otpStore.delete(email); // Cleanup
   res.json({ message: "Password reset successful" });
 });
 
 // ------------------ Google Auth Routes ------------------
-
 router.get("/google", passport.authenticate("google", {
   scope: ["profile", "email"]
 }));
 
-// ✅ Callback route
 router.get("/google/callback",
   passport.authenticate("google", {
-    failureRedirect: "/login-failed",
-    session: false
+    failureRedirect: "/login-failed"
   }),
   (req, res) => {
+    const userData = {
+      id: req.user.id,
+      email: req.user.email,
+      displayName: req.user.displayName,
+      provider: req.user.provider
+    };
+    
     res.json({
       message: "Google login successful",
-      user: req.user
+      user: userData
     });
   }
 );
 
-// Facebbok login route
+// ------------------ Facebook login ------------------
 router.get("/facebook", passport.authenticate("facebook", { scope: ["email"] }));
-
-// ✅ Facebook callback
 
 router.get("/facebook/callback",
   passport.authenticate("facebook", {
-    failureRedirect: "/login-failed",
-    session: false
+    failureRedirect: "/login-failed"
   }),
   (req, res) => {
+    const userData = {
+      id: req.user.id,
+      email: req.user.email,
+      displayName: req.user.displayName,
+      provider: req.user.provider
+    };
+    
     res.json({
       message: "Facebook login successful",
-      user: req.user
+      user: userData
     });
   }
 );
 
-// language change
-
+// ------------------ Language Change Text ------------------
 router.get('/text', (req, res) => {
   const t = req.t;
   res.json({
@@ -177,55 +217,62 @@ router.get('/text', (req, res) => {
   });
 });
 
-// update profile
-
+// ------------------ Update Profile ------------------
 router.put("/update-profile/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { email, currentPassword, newPassword } = req.body;
 
+  const userId = parseInt(id, 10);
+  if (!userId || isNaN(userId)) {
+    return res.status(400).json({ error: "Invalid user ID" });
+  }
+
   try {
-    const user = await User.findByPk(id);
+    const user = await knex("users").where({ id: userId }).first();
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    // ✅ Update email
     if (email) {
-      const existingEmail = await User.findOne({ where: { email } });
-      if (existingEmail && existingEmail.id !== user.id) {
+      const existingEmail = await knex("users").where({ email }).andWhereNot({ id: userId }).first();
+      if (existingEmail) {
         return res.status(400).json({ error: "Email already in use" });
       }
-      user.email = email.toLowerCase();
+      await knex("users").where({ id: userId }).update({ email: email.toLowerCase() });
     }
 
-    // ✅ Update password
     if (currentPassword && newPassword) {
       const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
       if (!isMatch) {
         return res.status(400).json({ error: "Current password is incorrect" });
       }
-      user.passwordHash = await bcrypt.hash(newPassword, 10);
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await knex("users").where({ id: userId }).update({ passwordHash });
     }
 
-    await user.save();
-    res.json({ message: "Profile updated successfully", user });
+    const updatedUser = await knex("users").where({ id: userId }).first();
+    res.json({ message: "Profile updated successfully", user: updatedUser });
   } catch (error) {
     console.error("Update profile error:", error);
     res.status(500).json({ error: "Something went wrong" });
   }
 });
 
-// notes 
+// ------------------ Notes Routes ------------------
+
+// Create Note
 router.post("/notes", authenticateToken, async (req, res) => {
   const { title, content } = req.body || {};
-  const userId = req.user.userId;
+  const userId = parseInt(req.user.userId, 10);
 
-  console.log("Input:", { title, content, userId });
+  if (!userId || isNaN(userId)) {
+    return res.status(400).json({ error: "Invalid user ID" });
+  }
 
   if (!title || !content) {
     return res.status(400).json({ error: "Title and content are required" });
   }
 
   try {
-    const note = await Note.create({ title, content, userId });
+    const [note] = await knex("notes").insert({ title, content, userId }).returning("*");
     res.status(201).json(note);
   } catch (err) {
     console.error("Note creation error:", err);
@@ -233,18 +280,21 @@ router.post("/notes", authenticateToken, async (req, res) => {
   }
 });
 
-
+// Get Single Note
 router.get("/notes/:id", authenticateToken, async (req, res) => {
-  const noteId = req.params.id;
-  const userId = req.user.userId;
+  const noteId = parseInt(req.params.id, 10);
+  const userId = parseInt(req.user.userId, 10);
+
+  if (!noteId || isNaN(noteId)) {
+    return res.status(400).json({ error: "Invalid note ID" });
+  }
+
+  if (!userId || isNaN(userId)) {
+    return res.status(400).json({ error: "Invalid user ID" });
+  }
 
   try {
-    const note = await Note.findOne({
-      where: {
-        id: noteId,
-        userId: userId, // ensures the user can only access their own notes
-      },
-    });
+    const note = await knex("notes").where({ id: noteId, userId }).first();
 
     if (!note) {
       return res.status(404).json({ error: "Note not found or access denied" });
@@ -256,43 +306,63 @@ router.get("/notes/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch note" });
   }
 });
+
+// Update Note
 router.put("/notes/:id", authenticateToken, async (req, res) => {
-  const noteId = req.params.id;
-  const userId = req.user.userId;
+  const noteId = parseInt(req.params.id, 10);
+  const userId = parseInt(req.user.userId, 10);
   const { title, content } = req.body;
 
+  if (!noteId || isNaN(noteId)) {
+    return res.status(400).json({ error: "Invalid note ID" });
+  }
+
+  if (!userId || isNaN(userId)) {
+    return res.status(400).json({ error: "Invalid user ID" });
+  }
+
   try {
-    const note = await Note.findOne({ where: { id: noteId, userId } });
+    const note = await knex("notes").where({ id: noteId, userId }).first();
 
     if (!note) {
       return res.status(404).json({ error: "Note not found or access denied" });
     }
 
-    // Update fields if provided
-    if (title) note.title = title;
-    if (content) note.content = content;
+    await knex("notes").where({ id: noteId, userId }).update({
+      title: title || note.title,
+      content: content || note.content,
+      updated_at: knex.fn.now()
+    });
 
-    await note.save();
-
-    res.json({ message: "Note updated successfully", note });
+    const updatedNote = await knex("notes").where({ id: noteId }).first();
+    res.json({ message: "Note updated successfully", note: updatedNote });
   } catch (err) {
     console.error("Update note error:", err);
     res.status(500).json({ error: "Failed to update note" });
   }
 });
 
+// Delete Note
 router.delete("/notes/:id", authenticateToken, async (req, res) => {
-  const noteId = req.params.id;
-  const userId = req.user.userId;
+  const noteId = parseInt(req.params.id, 10);
+  const userId = parseInt(req.user.userId, 10);
+
+  if (!noteId || isNaN(noteId)) {
+    return res.status(400).json({ error: "Invalid note ID" });
+  }
+
+  if (!userId || isNaN(userId)) {
+    return res.status(400).json({ error: "Invalid user ID" });
+  }
 
   try {
-    const note = await Note.findOne({ where: { id: noteId, userId } });
+    const note = await knex("notes").where({ id: noteId, userId }).first();
 
     if (!note) {
       return res.status(404).json({ error: "Note not found or access denied" });
     }
 
-    await note.destroy();
+    await knex("notes").where({ id: noteId }).del();
 
     res.json({ message: "Note deleted successfully" });
   } catch (err) {
@@ -300,7 +370,5 @@ router.delete("/notes/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to delete note" });
   }
 });
-
-
 
 module.exports = router;
